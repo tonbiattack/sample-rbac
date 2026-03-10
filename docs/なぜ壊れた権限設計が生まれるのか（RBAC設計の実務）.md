@@ -229,11 +229,14 @@ CREATE INDEX idx_role_permissions_permission_id ON role_permissions(permission_i
 ### ユーザーが持つ権限一覧を取得する
 
 ```sql
-SELECT DISTINCT p.name
-FROM user_roles ur
-JOIN role_permissions rp ON rp.role_id = ur.role_id
-JOIN permissions p ON p.id = rp.permission_id
-WHERE ur.user_id = :user_id
+SELECT DISTINCT
+    p.name
+FROM
+    user_roles ur
+    JOIN role_permissions rp ON rp.role_id = ur.role_id
+    JOIN permissions p ON p.id = rp.permission_id
+WHERE
+    ur.user_id =:user_id
 ORDER BY p.name;
 ```
 
@@ -241,45 +244,52 @@ ORDER BY p.name;
 
 ```sql
 SELECT EXISTS (
-  SELECT 1
-  FROM user_roles ur
-  JOIN role_permissions rp ON rp.role_id = ur.role_id
-  JOIN permissions p ON p.id = rp.permission_id
-  WHERE ur.user_id = :user_id
-    AND p.name = :permission_name
-) AS has_permission;
+        SELECT 1
+        FROM
+            user_roles ur
+            JOIN role_permissions rp ON rp.role_id = ur.role_id
+            JOIN permissions p ON p.id = rp.permission_id
+        WHERE
+            ur.user_id =:user_id
+            AND p.name =:permission_name
+    ) AS has_permission;
 ```
 
 ### ユーザーにロールを付与する
 
 ```sql
-INSERT INTO user_roles (user_id, role_id)
-VALUES (:user_id, :role_id);
+INSERT INTO
+    user_roles (user_id, role_id)
+VALUES (:user_id,:role_id);
 ```
 
 既に付与済みの可能性がある場合はUPSERTを使います。
 
 ```sql
-INSERT INTO user_roles (user_id, role_id)
-VALUES (:user_id, :role_id)
+INSERT INTO
+    user_roles (user_id, role_id)
+VALUES (:user_id,:role_id)
 ON CONFLICT (user_id, role_id) DO NOTHING;
 ```
 
 ### ロールに権限を付与する
 
 ```sql
-INSERT INTO role_permissions (role_id, permission_id)
-VALUES (:role_id, :permission_id)
+INSERT INTO
+    role_permissions (role_id, permission_id)
+VALUES (:role_id,:permission_id)
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 ```
 
 ### 権限名からpermission_idを引いて付与する
 
 ```sql
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT :role_id, p.id
+INSERT INTO
+    role_permissions (role_id, permission_id)
+SELECT:role_id, p.id
 FROM permissions p
-WHERE p.name = :permission_name
+WHERE
+    p.name =:permission_name
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 ```
 
