@@ -236,7 +236,7 @@ FROM
     JOIN role_permissions rp ON rp.role_id = ur.role_id
     JOIN permissions p ON p.id = rp.permission_id
 WHERE
-    ur.user_id =:user_id
+    ur.user_id = ?
 ORDER BY p.name;
 ```
 
@@ -250,8 +250,8 @@ SELECT EXISTS (
             JOIN role_permissions rp ON rp.role_id = ur.role_id
             JOIN permissions p ON p.id = rp.permission_id
         WHERE
-            ur.user_id =:user_id
-            AND p.name =:permission_name
+            ur.user_id = ?
+            AND p.name = ?
     ) AS has_permission;
 ```
 
@@ -260,37 +260,35 @@ SELECT EXISTS (
 ```sql
 INSERT INTO
     user_roles (user_id, role_id)
-VALUES (:user_id,:role_id);
+VALUES (?, ?);
 ```
 
 既に付与済みの可能性がある場合はUPSERTを使います。
 
 ```sql
-INSERT INTO
+INSERT IGNORE INTO
     user_roles (user_id, role_id)
-VALUES (:user_id,:role_id)
-ON CONFLICT (user_id, role_id) DO NOTHING;
+VALUES (?, ?);
 ```
 
 ### ロールに権限を付与する
 
 ```sql
-INSERT INTO
+INSERT IGNORE INTO
     role_permissions (role_id, permission_id)
-VALUES (:role_id,:permission_id)
-ON CONFLICT (role_id, permission_id) DO NOTHING;
+VALUES (?, ?);
 ```
 
 ### 権限名からpermission_idを引いて付与する
 
 ```sql
-INSERT INTO
+INSERT IGNORE INTO
     role_permissions (role_id, permission_id)
-SELECT:role_id, p.id
+SELECT
+    ?, p.id
 FROM permissions p
 WHERE
-    p.name =:permission_name
-ON CONFLICT (role_id, permission_id) DO NOTHING;
+    p.name = ?;
 ```
 
 ## 壊れた設計はなぜ生まれるのか
