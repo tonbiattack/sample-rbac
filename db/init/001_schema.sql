@@ -4,6 +4,28 @@ SET NAMES utf8mb4;
 -- 文字化け対策: DB既定の文字コード/照合順序を明示
 ALTER DATABASE sample_rbac CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
 
+-- ==========================================================
+-- RBAC（Role Based Access Control）の原理
+-- ----------------------------------------------------------
+-- 1) permission（個別権限）:
+--    何ができるかを表す最小単位（例: report.export, user.create）
+--
+-- 2) role（権限の集合）:
+--    複数 permission をまとめた「業務上の役割」（例: admin, viewer）
+--
+-- 3) user と role は多対多:
+--    1ユーザーが複数ロールを持てる（兼務や一時付与に対応）
+--    1ロールを複数ユーザーに付与できる（再利用しやすい）
+--
+-- 4) role と permission も多対多:
+--    1ロールに複数権限を持たせられる
+--    1権限を複数ロールで共有できる
+--
+-- 5) 直接 user に permission を持たせない理由:
+--    個別付与が増えると運用が崩れやすいため、原則は role 経由で管理する
+--    （例外的な個別付与が必要な場合は user_permissions を別途追加）
+-- ==========================================================
+
 -- users: システム利用者の基本情報を保持するテーブル
 CREATE TABLE users (
   -- ユーザー識別子（アプリケーション側で採番する想定）
@@ -41,6 +63,7 @@ CREATE TABLE permissions (
   COLLATE = utf8mb4_0900_ai_ci;
 
 -- user_roles: ユーザーとロールの多対多を表す中間テーブル
+-- 「ユーザーは複数ロールを持てる」を実現する中核テーブル
 CREATE TABLE user_roles (
   -- 付与先ユーザーID
   user_id BIGINT NOT NULL COMMENT 'ユーザーID（users.id 参照）',
@@ -49,6 +72,7 @@ CREATE TABLE user_roles (
   -- ロールを付与した日時
   assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'ロール付与日時',
   -- 同一ユーザーに同一ロールを二重付与しないための複合主キー
+  -- 例: (user_id=1, role_id=10) は1回だけ
   PRIMARY KEY (user_id, role_id),
   -- 参照整合性: 存在しないユーザーへの付与を防止
   CONSTRAINT fk_user_roles_user_id FOREIGN KEY (user_id) REFERENCES users(id),
@@ -59,12 +83,14 @@ CREATE TABLE user_roles (
   COLLATE = utf8mb4_0900_ai_ci;
 
 -- role_permissions: ロールと権限の多対多を表す中間テーブル
+-- 「ロールは複数権限の集合」を実現する中核テーブル
 CREATE TABLE role_permissions (
   -- 権限を持つロールID
   role_id BIGINT NOT NULL COMMENT 'ロールID（roles.id 参照）',
   -- ロールに紐づける権限ID
   permission_id BIGINT NOT NULL COMMENT '権限ID（permissions.id 参照）',
   -- 同一ロールに同一権限を二重付与しないための複合主キー
+  -- 例: (role_id=10, permission_id=100) は1回だけ
   PRIMARY KEY (role_id, permission_id),
   -- 参照整合性: 存在しないロールへの紐付けを防止
   CONSTRAINT fk_role_permissions_role_id FOREIGN KEY (role_id) REFERENCES roles(id),
