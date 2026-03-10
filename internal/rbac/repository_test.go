@@ -16,85 +16,95 @@ const (
 	testRoleViewerID int64 = 2002
 	testPermExportID int64 = 3001
 	testPermViewID   int64 = 3002
+	testRoleAdminName      = "rbac_admin"
+	testRoleViewerName     = "rbac_viewer"
+	testPermExportName     = "rbac.report.export"
+	testPermViewName       = "rbac.report.view"
 )
 
 func TestRepository_HasPermission(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-	ctx := context.Background()
+	t.Run("ユーザーが権限を持つ場合はtrueを返す", func(t *testing.T) {
+		db := setupTestDB(t)
+		repo := NewRepository(db)
+		ctx := context.Background()
 
-	seedBase(t, db)
-	if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
-		t.Fatalf("AssignRoleToUser failed: %v", err)
-	}
-	if err := repo.GrantPermissionToRole(ctx, testRoleAdminID, testPermExportID); err != nil {
-		t.Fatalf("GrantPermissionToRole failed: %v", err)
-	}
+		seedBase(t, db)
+		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
+			t.Fatalf("AssignRoleToUser failed: %v", err)
+		}
+		if err := repo.GrantPermissionToRole(ctx, testRoleAdminID, testPermExportID); err != nil {
+			t.Fatalf("GrantPermissionToRole failed: %v", err)
+		}
 
-	// admin ロールには report.export を付与しているため true になる想定です。
-	has, err := repo.HasPermission(ctx, testUserID, "report.export")
-	if err != nil {
-		t.Fatalf("HasPermission failed: %v", err)
-	}
-	if !has {
-		t.Fatal("expected has permission")
-	}
+		// admin ロールには rbac.report.export を付与しているため true になる想定です。
+		has, err := repo.HasPermission(ctx, testUserID, testPermExportName)
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if !has {
+			t.Fatal("expected has permission")
+		}
+	})
 }
 
 func TestRepository_HasPermission_FalseWhenNotGranted(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-	ctx := context.Background()
+	t.Run("ユーザーが権限を持たない場合はfalseを返す", func(t *testing.T) {
+		db := setupTestDB(t)
+		repo := NewRepository(db)
+		ctx := context.Background()
 
-	seedBase(t, db)
-	if err := repo.AssignRoleToUser(ctx, testUserID, testRoleViewerID); err != nil {
-		t.Fatalf("AssignRoleToUser failed: %v", err)
-	}
-	if err := repo.GrantPermissionToRole(ctx, testRoleViewerID, testPermViewID); err != nil {
-		t.Fatalf("GrantPermissionToRole failed: %v", err)
-	}
+		seedBase(t, db)
+		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleViewerID); err != nil {
+			t.Fatalf("AssignRoleToUser failed: %v", err)
+		}
+		if err := repo.GrantPermissionToRole(ctx, testRoleViewerID, testPermViewID); err != nil {
+			t.Fatalf("GrantPermissionToRole failed: %v", err)
+		}
 
-	// viewer ロールには report.view しかないため false になる想定です。
-	has, err := repo.HasPermission(ctx, testUserID, "report.export")
-	if err != nil {
-		t.Fatalf("HasPermission failed: %v", err)
-	}
-	if has {
-		t.Fatal("expected no permission")
-	}
+		// viewer ロールには rbac.report.view しかないため false になる想定です。
+		has, err := repo.HasPermission(ctx, testUserID, testPermExportName)
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if has {
+			t.Fatal("expected no permission")
+		}
+	})
 }
 
 func TestRepository_ListPermissions_DistinctSorted(t *testing.T) {
-	db := setupTestDB(t)
-	repo := NewRepository(db)
-	ctx := context.Background()
+	t.Run("複数ロールの権限を重複排除してソート順で返す", func(t *testing.T) {
+		db := setupTestDB(t)
+		repo := NewRepository(db)
+		ctx := context.Background()
 
-	seedBase(t, db)
-	if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
-		t.Fatalf("AssignRoleToUser failed: %v", err)
-	}
-	if err := repo.AssignRoleToUser(ctx, testUserID, testRoleViewerID); err != nil {
-		t.Fatalf("AssignRoleToUser failed: %v", err)
-	}
-	if err := repo.GrantPermissionToRole(ctx, testRoleAdminID, testPermExportID); err != nil {
-		t.Fatalf("GrantPermissionToRole failed: %v", err)
-	}
-	if err := repo.GrantPermissionToRole(ctx, testRoleViewerID, testPermViewID); err != nil {
-		t.Fatalf("GrantPermissionToRole failed: %v", err)
-	}
+		seedBase(t, db)
+		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
+			t.Fatalf("AssignRoleToUser failed: %v", err)
+		}
+		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleViewerID); err != nil {
+			t.Fatalf("AssignRoleToUser failed: %v", err)
+		}
+		if err := repo.GrantPermissionToRole(ctx, testRoleAdminID, testPermExportID); err != nil {
+			t.Fatalf("GrantPermissionToRole failed: %v", err)
+		}
+		if err := repo.GrantPermissionToRole(ctx, testRoleViewerID, testPermViewID); err != nil {
+			t.Fatalf("GrantPermissionToRole failed: %v", err)
+		}
 
-	// 2つのロールを持つため、権限はマージされソート済みで返る想定です。
-	permissions, err := repo.ListPermissions(ctx, testUserID)
-	if err != nil {
-		t.Fatalf("ListPermissions failed: %v", err)
-	}
+		// 2つのロールを持つため、権限はマージされソート済みで返る想定です。
+		permissions, err := repo.ListPermissions(ctx, testUserID)
+		if err != nil {
+			t.Fatalf("ListPermissions failed: %v", err)
+		}
 
-	if len(permissions) != 2 {
-		t.Fatalf("expected 2 permissions, got %d (%v)", len(permissions), permissions)
-	}
-	if permissions[0] != "report.export" || permissions[1] != "report.view" {
-		t.Fatalf("unexpected permissions: %v", permissions)
-	}
+		if len(permissions) != 2 {
+			t.Fatalf("expected 2 permissions, got %d (%v)", len(permissions), permissions)
+		}
+		if permissions[0] != testPermExportName || permissions[1] != testPermViewName {
+			t.Fatalf("unexpected permissions: %v", permissions)
+		}
+	})
 }
 
 func setupTestDB(t *testing.T) *gorm.DB {
@@ -136,18 +146,18 @@ func seedBase(t *testing.T, db *gorm.DB) {
 
 	// 全テスト共通で使う最小のマスタデータを投入します。
 	mustExec(t, db, "INSERT INTO users (id, email) VALUES (?, ?)", testUserID, "alice@example.com")
-	mustExec(t, db, "INSERT INTO roles (id, name) VALUES (?, ?), (?, ?)", testRoleAdminID, "admin", testRoleViewerID, "viewer")
-	mustExec(t, db, "INSERT INTO permissions (id, name) VALUES (?, ?), (?, ?)", testPermExportID, "report.export", testPermViewID, "report.view")
+	mustExec(t, db, "INSERT INTO roles (id, name) VALUES (?, ?), (?, ?)", testRoleAdminID, testRoleAdminName, testRoleViewerID, testRoleViewerName)
+	mustExec(t, db, "INSERT INTO permissions (id, name) VALUES (?, ?), (?, ?)", testPermExportID, testPermExportName, testPermViewID, testPermViewName)
 }
 
 func cleanupTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
-	// 外部キー制約を満たすため、依存関係の子テーブルから削除します。
-	mustExec(t, db, "DELETE FROM role_permissions")
-	mustExec(t, db, "DELETE FROM user_roles")
-	mustExec(t, db, "DELETE FROM permissions")
-	mustExec(t, db, "DELETE FROM roles")
-	mustExec(t, db, "DELETE FROM users")
+	// 並列テストで衝突しないよう、テストで使ったIDの行だけ削除します。
+	mustExec(t, db, "DELETE FROM role_permissions WHERE role_id IN (?, ?) OR permission_id IN (?, ?)", testRoleAdminID, testRoleViewerID, testPermExportID, testPermViewID)
+	mustExec(t, db, "DELETE FROM user_roles WHERE user_id = ? OR role_id IN (?, ?)", testUserID, testRoleAdminID, testRoleViewerID)
+	mustExec(t, db, "DELETE FROM permissions WHERE id IN (?, ?)", testPermExportID, testPermViewID)
+	mustExec(t, db, "DELETE FROM roles WHERE id IN (?, ?)", testRoleAdminID, testRoleViewerID)
+	mustExec(t, db, "DELETE FROM users WHERE id = ?", testUserID)
 }
 
 func mustExec(t *testing.T, db *gorm.DB, sql string, args ...any) {
