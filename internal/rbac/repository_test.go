@@ -16,31 +16,37 @@ const (
 	testRoleViewerID int64 = 2002
 	testPermExportID int64 = 3001
 	testPermViewID   int64 = 3002
-	testRoleAdminName      = "rbac_admin"
-	testRoleViewerName     = "rbac_viewer"
-	testPermExportName     = "rbac.report.export"
-	testPermViewName       = "rbac.report.view"
+	// 既存データと衝突しにくいよう、サンプル専用プレフィックスを付けます。
+	testRoleAdminName  = "rbac_admin"
+	testRoleViewerName = "rbac_viewer"
+	testPermExportName = "rbac.report.export"
+	testPermViewName   = "rbac.report.view"
 )
 
 func TestRepository_HasPermission(t *testing.T) {
 	t.Run("ユーザーが権限を持つ場合はtrueを返す", func(t *testing.T) {
+		// 1) テスト用DB接続とRepositoryを準備します。
 		db := setupTestDB(t)
 		repo := NewRepository(db)
 		ctx := context.Background()
 
+		// 2) users / roles / permissions の基本データを投入します。
 		seedBase(t, db)
+		// 3) ユーザーにadminロールを付与します。
 		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
 			t.Fatalf("AssignRoleToUser failed: %v", err)
 		}
+		// 4) adminロールにエクスポート権限を付与します。
 		if err := repo.GrantPermissionToRole(ctx, testRoleAdminID, testPermExportID); err != nil {
 			t.Fatalf("GrantPermissionToRole failed: %v", err)
 		}
 
-		// admin ロールには rbac.report.export を付与しているため true になる想定です。
+		// 5) 権限判定を実行します。
 		has, err := repo.HasPermission(ctx, testUserID, testPermExportName)
 		if err != nil {
 			t.Fatalf("HasPermission failed: %v", err)
 		}
+		// 6) 付与済みなので true を期待します。
 		if !has {
 			t.Fatal("expected has permission")
 		}
@@ -49,23 +55,28 @@ func TestRepository_HasPermission(t *testing.T) {
 
 func TestRepository_HasPermission_FalseWhenNotGranted(t *testing.T) {
 	t.Run("ユーザーが権限を持たない場合はfalseを返す", func(t *testing.T) {
+		// 1) テスト用DB接続とRepositoryを準備します。
 		db := setupTestDB(t)
 		repo := NewRepository(db)
 		ctx := context.Background()
 
+		// 2) users / roles / permissions の基本データを投入します。
 		seedBase(t, db)
+		// 3) ユーザーにはviewerロールのみ付与します。
 		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleViewerID); err != nil {
 			t.Fatalf("AssignRoleToUser failed: %v", err)
 		}
+		// 4) viewerロールには閲覧権限のみ付与します。
 		if err := repo.GrantPermissionToRole(ctx, testRoleViewerID, testPermViewID); err != nil {
 			t.Fatalf("GrantPermissionToRole failed: %v", err)
 		}
 
-		// viewer ロールには rbac.report.view しかないため false になる想定です。
+		// 5) 付与していないエクスポート権限を問い合わせます。
 		has, err := repo.HasPermission(ctx, testUserID, testPermExportName)
 		if err != nil {
 			t.Fatalf("HasPermission failed: %v", err)
 		}
+		// 6) 未付与なので false を期待します。
 		if has {
 			t.Fatal("expected no permission")
 		}
@@ -74,11 +85,14 @@ func TestRepository_HasPermission_FalseWhenNotGranted(t *testing.T) {
 
 func TestRepository_ListPermissions_DistinctSorted(t *testing.T) {
 	t.Run("複数ロールの権限を重複排除してソート順で返す", func(t *testing.T) {
+		// 1) テスト用DB接続とRepositoryを準備します。
 		db := setupTestDB(t)
 		repo := NewRepository(db)
 		ctx := context.Background()
 
+		// 2) users / roles / permissions の基本データを投入します。
 		seedBase(t, db)
+		// 3) 同一ユーザーに2つのロールを付与します。
 		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
 			t.Fatalf("AssignRoleToUser failed: %v", err)
 		}
@@ -92,15 +106,17 @@ func TestRepository_ListPermissions_DistinctSorted(t *testing.T) {
 			t.Fatalf("GrantPermissionToRole failed: %v", err)
 		}
 
-		// 2つのロールを持つため、権限はマージされソート済みで返る想定です。
+		// 5) 権限一覧を取得します。
 		permissions, err := repo.ListPermissions(ctx, testUserID)
 		if err != nil {
 			t.Fatalf("ListPermissions failed: %v", err)
 		}
 
+		// 6) 権限が2件にマージされていることを確認します。
 		if len(permissions) != 2 {
 			t.Fatalf("expected 2 permissions, got %d (%v)", len(permissions), permissions)
 		}
+		// 7) ORDER BY p.name でソート済みのため、名前順で比較します。
 		if permissions[0] != testPermExportName || permissions[1] != testPermViewName {
 			t.Fatalf("unexpected permissions: %v", permissions)
 		}
@@ -122,6 +138,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		err error
 	)
 
+	// DB起動直後の接続失敗を吸収するため、短いリトライを行います。
 	for range 10 {
 		db, err = OpenMySQL(dsn)
 		if err == nil {
@@ -145,14 +162,18 @@ func seedBase(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
 	// 全テスト共通で使う最小のマスタデータを投入します。
+	// users: 権限判定対象のユーザー
 	mustExec(t, db, "INSERT INTO users (id, email) VALUES (?, ?)", testUserID, "alice@example.com")
+	// roles: admin / viewer の2種類
 	mustExec(t, db, "INSERT INTO roles (id, name) VALUES (?, ?), (?, ?)", testRoleAdminID, testRoleAdminName, testRoleViewerID, testRoleViewerName)
+	// permissions: export / view の2種類
 	mustExec(t, db, "INSERT INTO permissions (id, name) VALUES (?, ?), (?, ?)", testPermExportID, testPermExportName, testPermViewID, testPermViewName)
 }
 
 func cleanupTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	// 並列テストで衝突しないよう、テストで使ったIDの行だけ削除します。
+	// 依存順: role_permissions -> user_roles -> permissions/roles -> users
 	mustExec(t, db, "DELETE FROM role_permissions WHERE role_id IN (?, ?) OR permission_id IN (?, ?)", testRoleAdminID, testRoleViewerID, testPermExportID, testPermViewID)
 	mustExec(t, db, "DELETE FROM user_roles WHERE user_id = ? OR role_id IN (?, ?)", testUserID, testRoleAdminID, testRoleViewerID)
 	mustExec(t, db, "DELETE FROM permissions WHERE id IN (?, ?)", testPermExportID, testPermViewID)
