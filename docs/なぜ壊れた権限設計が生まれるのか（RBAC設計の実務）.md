@@ -301,7 +301,7 @@ ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 この記事の内容をそのまま試せるサンプル実装を公開しています。
 
-- リポジトリ: https://github.com/tonbiattack/sample-rbac
+https://github.com/tonbiattack/sample-rbac
 
 実装内容の要点は次です。
 
