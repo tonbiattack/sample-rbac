@@ -17,7 +17,9 @@ const (
 	ucUserID      int64 = 5001
 	ucRoleAdminID int64 = 6001
 	ucRoleUserID  int64 = 6002
-	ucPermExpID   int64 = 7001
+	ucPermExpName       = "report.export"
+	ucRoleAdminName     = "usecase_admin"
+	ucRoleUserName      = "usecase_user"
 )
 
 func TestReportExporter_ExportMonthlyReport_Success(t *testing.T) {
@@ -31,7 +33,9 @@ func TestReportExporter_ExportMonthlyReport_Success(t *testing.T) {
 		seedUsecaseBase(t, db)
 		// 3) ユーザーにadminロール、adminロールにreport.export権限を付与します。
 		mustExecUC(t, db, "INSERT INTO user_roles (user_id, role_id) VALUES (?, ?)", ucUserID, ucRoleAdminID)
-		mustExecUC(t, db, "INSERT INTO role_permissions (role_id, permission_id) VALUES (?, ?)", ucRoleAdminID, ucPermExpID)
+		if err := repo.GrantPermissionToRoleByName(ctx, ucRoleAdminID, ucPermExpName); err != nil {
+			t.Fatalf("GrantPermissionToRoleByName failed: %v", err)
+		}
 
 		// 4) 業務ユースケースを作成します。
 		authorizer := NewAuthorizer(repo)
@@ -111,19 +115,18 @@ func seedUsecaseBase(t *testing.T, db *gorm.DB) {
 
 	// users: 業務処理の実行ユーザー
 	mustExecUC(t, db, "INSERT INTO users (id, email) VALUES (?, ?)", ucUserID, "bob@example.com")
-	// roles: admin（権限あり）とuser（権限なし）を用意
-	mustExecUC(t, db, "INSERT INTO roles (id, name) VALUES (?, ?), (?, ?)", ucRoleAdminID, "admin", ucRoleUserID, "user")
-	// permissions: 今回の業務で必要な report.export のみ
-	mustExecUC(t, db, "INSERT INTO permissions (id, name) VALUES (?, ?)", ucPermExpID, "report.export")
+	// roles: テスト専用名で衝突を避けます。
+	mustExecUC(t, db, "INSERT INTO roles (id, name) VALUES (?, ?), (?, ?)", ucRoleAdminID, ucRoleAdminName, ucRoleUserID, ucRoleUserName)
+	// permissions: report.export が未登録の場合のみ投入します。
+	mustExecUC(t, db, "INSERT INTO permissions (id, name) VALUES (?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name)", 9204, ucPermExpName)
 }
 
 func cleanupUsecaseTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	// 並列テストで衝突しないよう、テストで使ったIDの行だけ削除します。
 	// 依存順: role_permissions -> user_roles -> permissions/roles -> users
-	mustExecUC(t, db, "DELETE FROM role_permissions WHERE role_id IN (?, ?) OR permission_id = ?", ucRoleAdminID, ucRoleUserID, ucPermExpID)
+	mustExecUC(t, db, "DELETE FROM role_permissions WHERE role_id IN (?, ?)", ucRoleAdminID, ucRoleUserID)
 	mustExecUC(t, db, "DELETE FROM user_roles WHERE user_id = ? OR role_id IN (?, ?)", ucUserID, ucRoleAdminID, ucRoleUserID)
-	mustExecUC(t, db, "DELETE FROM permissions WHERE id = ?", ucPermExpID)
 	mustExecUC(t, db, "DELETE FROM roles WHERE id IN (?, ?)", ucRoleAdminID, ucRoleUserID)
 	mustExecUC(t, db, "DELETE FROM users WHERE id = ?", ucUserID)
 }

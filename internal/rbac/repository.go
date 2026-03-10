@@ -34,6 +34,19 @@ func (r *Repository) GrantPermissionToRole(ctx context.Context, roleID, permissi
 		Error
 }
 
+// GrantPermissionToRoleByName は権限名から permission_id を解決してロールへ付与します。
+// 権限名が存在しない場合は SELECT 結果が0件のため、挿入は行われません（エラーにはしない）。
+func (r *Repository) GrantPermissionToRoleByName(ctx context.Context, roleID int64, permissionName string) error {
+	return r.db.WithContext(ctx).Exec(`
+INSERT IGNORE INTO role_permissions (role_id, permission_id)
+SELECT
+    ?, p.id
+FROM permissions p
+WHERE
+    p.name = ?
+`, roleID, permissionName).Error
+}
+
 // HasPermission はユーザーが指定権限名を持っているかを判定します。
 // 記事で示した EXISTS クエリをそのまま実装しています。
 func (r *Repository) HasPermission(ctx context.Context, userID int64, permissionName string) (bool, error) {

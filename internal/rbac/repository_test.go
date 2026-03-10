@@ -123,6 +123,64 @@ func TestRepository_ListPermissions_DistinctSorted(t *testing.T) {
 	})
 }
 
+func TestRepository_GrantPermissionToRoleByName(t *testing.T) {
+	t.Run("権限名からロールへ権限を付与できる", func(t *testing.T) {
+		// 1) テスト用DB接続とRepositoryを準備します。
+		db := setupTestDB(t)
+		repo := NewRepository(db)
+		ctx := context.Background()
+
+		// 2) users / roles / permissions の基本データを投入します。
+		seedBase(t, db)
+		// 3) ユーザーにadminロールを付与します。
+		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
+			t.Fatalf("AssignRoleToUser failed: %v", err)
+		}
+
+		// 4) 権限名を使ってロールへ権限を付与します。
+		if err := repo.GrantPermissionToRoleByName(ctx, testRoleAdminID, testPermExportName); err != nil {
+			t.Fatalf("GrantPermissionToRoleByName failed: %v", err)
+		}
+
+		// 5) 付与後にユーザー権限として判定できることを確認します。
+		has, err := repo.HasPermission(ctx, testUserID, testPermExportName)
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if !has {
+			t.Fatal("expected has permission")
+		}
+	})
+
+	t.Run("存在しない権限名を指定してもエラーにならず付与されない", func(t *testing.T) {
+		// 1) テスト用DB接続とRepositoryを準備します。
+		db := setupTestDB(t)
+		repo := NewRepository(db)
+		ctx := context.Background()
+
+		// 2) users / roles / permissions の基本データを投入します。
+		seedBase(t, db)
+		// 3) ユーザーにadminロールを付与します。
+		if err := repo.AssignRoleToUser(ctx, testUserID, testRoleAdminID); err != nil {
+			t.Fatalf("AssignRoleToUser failed: %v", err)
+		}
+
+		// 4) 存在しない権限名で付与を試みます（SQL上は0件挿入）。
+		if err := repo.GrantPermissionToRoleByName(ctx, testRoleAdminID, "rbac.report.not_found"); err != nil {
+			t.Fatalf("GrantPermissionToRoleByName failed: %v", err)
+		}
+
+		// 5) 対象権限は付与されていないため false のままです。
+		has, err := repo.HasPermission(ctx, testUserID, testPermExportName)
+		if err != nil {
+			t.Fatalf("HasPermission failed: %v", err)
+		}
+		if has {
+			t.Fatal("expected no permission")
+		}
+	})
+}
+
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
