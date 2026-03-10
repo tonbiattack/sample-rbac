@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	// 固定IDを使い、テストデータを読みやすく・再現しやすくします。
 	testUserID       int64 = 1001
 	testRoleAdminID  int64 = 2001
 	testRoleViewerID int64 = 2002
@@ -30,6 +31,7 @@ func TestRepository_HasPermission(t *testing.T) {
 		t.Fatalf("GrantPermissionToRole failed: %v", err)
 	}
 
+	// admin ロールには report.export を付与しているため true になる想定です。
 	has, err := repo.HasPermission(ctx, testUserID, "report.export")
 	if err != nil {
 		t.Fatalf("HasPermission failed: %v", err)
@@ -52,6 +54,7 @@ func TestRepository_HasPermission_FalseWhenNotGranted(t *testing.T) {
 		t.Fatalf("GrantPermissionToRole failed: %v", err)
 	}
 
+	// viewer ロールには report.view しかないため false になる想定です。
 	has, err := repo.HasPermission(ctx, testUserID, "report.export")
 	if err != nil {
 		t.Fatalf("HasPermission failed: %v", err)
@@ -80,6 +83,7 @@ func TestRepository_ListPermissions_DistinctSorted(t *testing.T) {
 		t.Fatalf("GrantPermissionToRole failed: %v", err)
 	}
 
+	// 2つのロールを持つため、権限はマージされソート済みで返る想定です。
 	permissions, err := repo.ListPermissions(ctx, testUserID)
 	if err != nil {
 		t.Fatalf("ListPermissions failed: %v", err)
@@ -96,8 +100,10 @@ func TestRepository_ListPermissions_DistinctSorted(t *testing.T) {
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
+	// CIやローカル差異に対応するため、環境変数で上書き可能にします。
 	dsn := os.Getenv("TEST_MYSQL_DSN")
 	if dsn == "" {
+		// デフォルトは docker-compose.yml の接続情報と一致させています。
 		dsn = "app:app@tcp(127.0.0.1:3306)/sample_rbac?parseTime=true"
 	}
 
@@ -111,12 +117,15 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		if err == nil {
 			break
 		}
+		// MySQLコンテナ起動直後は接続失敗するため、短時間リトライします。
 		time.Sleep(500 * time.Millisecond)
 	}
 	if err != nil {
+		// 実DBが起動していない環境では失敗ではなくスキップにします。
 		t.Skipf("mysql not ready: %v", err)
 	}
 
+	// テスト独立性のため、実行前後でテーブルをクリーンアップします。
 	cleanupTables(t, db)
 	t.Cleanup(func() { cleanupTables(t, db) })
 	return db
@@ -125,6 +134,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 func seedBase(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
+	// 全テスト共通で使う最小のマスタデータを投入します。
 	mustExec(t, db, "INSERT INTO users (id, email) VALUES (?, ?)", testUserID, "alice@example.com")
 	mustExec(t, db, "INSERT INTO roles (id, name) VALUES (?, ?), (?, ?)", testRoleAdminID, "admin", testRoleViewerID, "viewer")
 	mustExec(t, db, "INSERT INTO permissions (id, name) VALUES (?, ?), (?, ?)", testPermExportID, "report.export", testPermViewID, "report.view")
@@ -132,6 +142,7 @@ func seedBase(t *testing.T, db *gorm.DB) {
 
 func cleanupTables(t *testing.T, db *gorm.DB) {
 	t.Helper()
+	// 外部キー制約を満たすため、依存関係の子テーブルから削除します。
 	mustExec(t, db, "DELETE FROM role_permissions")
 	mustExec(t, db, "DELETE FROM user_roles")
 	mustExec(t, db, "DELETE FROM permissions")
@@ -141,6 +152,7 @@ func cleanupTables(t *testing.T, db *gorm.DB) {
 
 func mustExec(t *testing.T, db *gorm.DB, sql string, args ...any) {
 	t.Helper()
+	// セットアップ/後片付けのSQL実行を簡潔にするためのヘルパーです。
 	if err := db.Exec(sql, args...).Error; err != nil {
 		t.Fatalf("exec failed: %s err=%v", sql, err)
 	}
