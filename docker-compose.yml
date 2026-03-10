@@ -3,6 +3,10 @@ services:
     image: mysql:8.4
     container_name: sample-rbac-mysql
     restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --skip-character-set-client-handshake
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: sample_rbac
