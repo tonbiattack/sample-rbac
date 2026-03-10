@@ -297,6 +297,28 @@ ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 つまり、壊れた設計は間違いから生まれるのではなく、自然な進化の結果として生まれることが多いです。
 
+## Go実装サンプル
+
+この記事の内容をそのまま試せるサンプル実装を公開しています。
+
+- リポジトリ: https://github.com/tonbiattack/sample-rbac
+
+実装内容の要点は次です。
+
+- 技術: `Go + GORM + MySQL + Docker`
+- テーブル: `users / roles / permissions / user_roles / role_permissions`
+- 権限判定: `HasPermission`（`EXISTS`クエリ）
+- 権限一覧取得: `ListPermissions`（`DISTINCT + ORDER BY`）
+- 業務ユースケース例: `report.export` を事前チェックしてから処理実行
+- テスト: 実DBを使った統合テスト（テストファースト）
+
+ローカルでの最小実行手順:
+
+```bash
+docker compose up -d mysql
+go test ./...
+```
+
 ## まとめ
 
 業務システムの権限設計は次の流れで壊れやすくなります。
